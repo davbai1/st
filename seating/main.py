@@ -54,7 +54,6 @@ AUDITORIUMS = {
     "R505": AUDITORIUM_201
 }
 
-
 # =============================================
 # ФУНКЦИИ
 # =============================================
@@ -62,7 +61,6 @@ AUDITORIUMS = {
 def create_seating_chart(students, row_config, manual_assignments=None):
     if manual_assignments is None:
         manual_assignments = {}
-
     assignments = {}
     used = set()
 
@@ -93,7 +91,6 @@ def create_seating_chart(students, row_config, manual_assignments=None):
 
     return assignments
 
-
 # =============================================
 # UI
 # =============================================
@@ -101,30 +98,28 @@ def create_seating_chart(students, row_config, manual_assignments=None):
 st.set_page_config(layout="wide", page_title="Seating Chart")
 st.title("Seating in the exam on differential equations")
 
-# Выбор аудитории
 choice = st.radio(
     "Choose auditorium",
     options=list(AUDITORIUMS.keys()),
     format_func=lambda k: AUDITORIUMS[k]["name"],
     horizontal=True
 )
+
 aud = AUDITORIUMS[choice]
 row_config = aud["row_config"]
 students = aud["students"]
 manual = aud.get("manual_assignments", {})
 name = aud["name"]
 
-# Рассадка
 assignments = create_seating_chart(students, row_config, manual)
 
-# Проверка на переполнение
 total_seats = sum(sum(2 for c in row if c == "desk") for row in row_config)
 if len(students) > total_seats:
     st.error(f"⚠️ {len(students) - total_seats} студентов не уместились!")
 
-st.subheader(f"Auditorium: {name}")
+st.subheader(f"{name}")
 
-# Собираем DataFrame с учётом gap
+# Собираем DataFrame с учётом gap и tooltip
 rows = []
 max_cols = 0
 for r_idx, cfg in enumerate(row_config, start=1):
@@ -132,23 +127,25 @@ for r_idx, cfg in enumerate(row_config, start=1):
     seat_counter = 1
     for item in cfg:
         if item == "desk":
-            for _ in range(2):
-                student = assignments.get((r_idx, seat_counter), "")
-                rows.append({
-                    "row": r_idx,
-                    "col": col_counter,
-                    "student": student,
-                    "occupied": bool(student)
-                })
-                seat_counter += 1
-                col_counter += 1
+            # левое место
+            student = assignments.get((r_idx, seat_counter), "")
+            tooltip = f"{student}, seat {seat_counter}" if student else ""
+            rows.append({"row": r_idx, "col": col_counter, "tooltip": tooltip, "occupied": bool(student)})
+            seat_counter += 1
+            col_counter += 1
+            # правое место
+            student = assignments.get((r_idx, seat_counter), "")
+            tooltip = f"{student} — seat {seat_counter}" if student else ""
+            rows.append({"row": r_idx, "col": col_counter, "tooltip": tooltip, "occupied": bool(student)})
+            seat_counter += 1
+            col_counter += 1
         else:  # gap
             col_counter += 1
     max_cols = max(max_cols, col_counter - 1)
 
 df = pd.DataFrame(rows)
 
-# Altair: точки + учёт gap через domain
+# Altair: добавлена scale.domain, чтобы учесть пустые gap-колонки
 chart = (
     alt.Chart(df)
     .mark_circle(size=300)
@@ -157,28 +154,18 @@ chart = (
             "col:O",
             title=None,
             axis=alt.Axis(labels=False, ticks=False),
-            scale=alt.Scale(domain=list(range(1, max_cols + 1)))
+            scale=alt.Scale(domain=list(range(1, max_cols + 1)))  # ← это вернёт отступы для gap
         ),
-        y=alt.Y("row:O", title="Row", sort="descending"),
-        color=alt.condition(
-            alt.datum.occupied,
-            alt.value("red"),
-            alt.value("lightgray")
-        ),
-        tooltip=[alt.Tooltip("student:N", title="Student")]
+        y=alt.Y("row:O", title="Row", sort="descending", axis=alt.Axis(labelAngle=0)),
+        color=alt.condition(alt.datum.occupied, alt.value("red"), alt.value("lightgray")),
+        tooltip=alt.Tooltip("tooltip:N", title="")
     )
-    .properties(
-        height=len(row_config) * 50
-    )
+    .properties(height=len(row_config) * 50)
 )
 
 st.altair_chart(chart, use_container_width=True)
 
 # Таблица с рассадкой
 st.subheader("Student seating table")
-table = [
-    {"Name": nm, "Place": f"Row {r}, Seat {s}"}
-    for (r, s), nm in assignments.items()
-]
-df_table = pd.DataFrame(table)
-st.dataframe(df_table, hide_index=True, use_container_width=True)
+table = [{"Name": nm, "Place": f"Row {r}, Seat {s}"} for (r, s), nm in assignments.items()]
+st.dataframe(pd.DataFrame(table), hide_index=True, use_container_width=True)
