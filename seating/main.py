@@ -127,39 +127,48 @@ for r_idx, cfg in enumerate(row_config, start=1):
     seat_counter = 1
     for item in cfg:
         if item == "desk":
-            # левое место
-            student = assignments.get((r_idx, seat_counter), "")
-            tooltip = f"{student}, seat {seat_counter}" if student else ""
-            rows.append({"row": r_idx, "col": col_counter, "tooltip": tooltip, "occupied": bool(student)})
-            seat_counter += 1
-            col_counter += 1
-            # правое место
-            student = assignments.get((r_idx, seat_counter), "")
-            tooltip = f"{student} — seat {seat_counter}" if student else ""
-            rows.append({"row": r_idx, "col": col_counter, "tooltip": tooltip, "occupied": bool(student)})
-            seat_counter += 1
-            col_counter += 1
-        else:  # gap
+            for _ in range(2):
+                student = assignments.get((r_idx, seat_counter), "")
+                tooltip = f"{student} , seat {seat_counter}" if student else ""
+                rows.append({
+                    "row": r_idx,
+                    "col": col_counter,
+                    "tooltip": tooltip,
+                    "occupied": bool(student)
+                })
+                seat_counter += 1
+                col_counter += 1
+        else:
             col_counter += 1
     max_cols = max(max_cols, col_counter - 1)
 
 df = pd.DataFrame(rows)
 
-# Altair: добавлена scale.domain, чтобы учесть пустые gap-колонки
+# Добавляем селектор, который срабатывает на тач/клик:
+selector = alt.selection_single(
+    on="touchstart",      # можно также указать "click"
+    fields=["row", "col"],
+    empty="none"
+)
+
 chart = (
     alt.Chart(df)
     .mark_circle(size=300)
     .encode(
-        x=alt.X(
-            "col:O",
-            title=None,
-            axis=alt.Axis(labels=False, ticks=False),
-            scale=alt.Scale(domain=list(range(1, max_cols + 1)))  # ← это вернёт отступы для gap
+        x=alt.X("col:O", title=None, axis=alt.Axis(labels=False, ticks=False),
+                scale=alt.Scale(domain=list(range(1, max_cols + 1)))),
+        y=alt.Y("row:O", title="Row", sort="descending",
+                axis=alt.Axis(labelAngle=0)),
+        color=alt.condition(
+            alt.datum.occupied,
+            alt.value("red"),
+            alt.value("lightgray")
         ),
-        y=alt.Y("row:O", title="Row", sort="descending", axis=alt.Axis(labelAngle=0)),
-        color=alt.condition(alt.datum.occupied, alt.value("red"), alt.value("lightgray")),
+        # Показываем tooltip из поля tooltip, но только для выбранной точки:
+        opacity=alt.condition(selector, alt.value(1), alt.value(0.8)),
         tooltip=alt.Tooltip("tooltip:N", title="")
     )
+    .add_selection(selector)      # <-- сюда
     .properties(height=len(row_config) * 50)
 )
 
