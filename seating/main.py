@@ -3,6 +3,12 @@ import pandas as pd
 import altair as alt
 
 # =============================================
+# ВКЛЮЧАЕМ ТУЛТИПЫ ПО КЛИКУ/ТАЧУ
+# =============================================
+# Vega-Tooltip: showOn 'click' позволит мобильным пользователям тапнуть по точке
+alt.renderers.set_embed_options(tooltip={'showOn': 'click'})
+
+# =============================================
 # КОНФИГУРАЦИЯ АУДИТОРИЙ
 # =============================================
 
@@ -144,9 +150,9 @@ for r_idx, cfg in enumerate(row_config, start=1):
 
 df = pd.DataFrame(rows)
 
-# Добавляем селектор, который срабатывает на тач/клик:
+# Добавляем селектор, который срабатывает на клик/тап:
 selector = alt.selection_single(
-    on="touchstart",      # можно также указать "click"
+    on="click",        # click/тач
     fields=["row", "col"],
     empty="none"
 )
@@ -164,11 +170,10 @@ chart = (
             alt.value("red"),
             alt.value("lightgray")
         ),
-        # Показываем tooltip из поля tooltip, но только для выбранной точки:
         opacity=alt.condition(selector, alt.value(1), alt.value(0.8)),
         tooltip=alt.Tooltip("tooltip:N", title="")
     )
-    .add_selection(selector)      # <-- сюда
+    .add_selection(selector)
     .properties(height=len(row_config) * 50)
 )
 
