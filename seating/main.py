@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import altair as alt
+import plotly.express as px
 
 # =============================================
 # КОНФИГУРАЦИЯ АУДИТОРИЙ
@@ -54,17 +54,17 @@ AUDITORIUMS = {
     "R505": AUDITORIUM_201
 }
 
-# =============================================
-# ФУНКЦИИ
-# =============================================
 
+# =============================================
+# ФУНКЦИЯ РАССАДКИ
+# =============================================
 def create_seating_chart(students, row_config, manual_assignments=None):
     if manual_assignments is None:
         manual_assignments = {}
     assignments = {}
     used = set()
 
-    # 1. Ручные назначения
+    # 1) Ручные назначения
     for (r, s), name in manual_assignments.items():
         if 1 <= r <= len(row_config):
             max_seats = sum(2 for c in row_config[r-1] if c == "desk")
@@ -76,13 +76,13 @@ def create_seating_chart(students, row_config, manual_assignments=None):
         else:
             st.error(f"CONFIG ERROR: ряд {r} отсутствует!")
 
-    # 2. Авто-рассадка оставшихся
+    # 2) Авто-рассадка остальных
     remaining = [x for x in students if x not in used]
     idx = 0
     for r_idx, cfg in enumerate(row_config, start=1):
         seats = sum(2 for c in cfg if c == "desk")
-        for s in range(1, seats+1, 2):
-            key = (r_idx, s)
+        for seat in range(1, seats+1, 2):
+            key = (r_idx, seat)
             if key in assignments:
                 continue
             if idx < len(remaining):
@@ -91,10 +91,10 @@ def create_seating_chart(students, row_config, manual_assignments=None):
 
     return assignments
 
-# =============================================
-# UI
-# =============================================
 
+# =============================================
+# UI STREAMLIT
+# =============================================
 st.set_page_config(layout="wide", page_title="Seating Chart")
 st.title("Seating in the exam on differential equations")
 
@@ -117,72 +117,66 @@ total_seats = sum(sum(2 for c in row if c == "desk") for row in row_config)
 if len(students) > total_seats:
     st.error(f"⚠️ {len(students) - total_seats} студентов не уместились!")
 
-st.subheader(f"{name}")
+st.subheader(name)
 
-# Собираем DataFrame с учётом gap и "help"
+# Собираем DataFrame с учётом gap и текстом для тултипа
 rows = []
 max_cols = 0
 for r_idx, cfg in enumerate(row_config, start=1):
-    col_counter = 1
-    seat_counter = 1
+    col = 1
+    seat = 1
     for item in cfg:
         if item == "desk":
             for _ in range(2):
-                student = assignments.get((r_idx, seat_counter), "")
-                help_text = f"{student} — seat {seat_counter}" if student else ""
+                student = assignments.get((r_idx, seat), "")
+                help_text = f"{student} — seat {seat}" if student else ""
                 rows.append({
                     "row": r_idx,
-                    "col": col_counter,
+                    "col": col,
                     "help": help_text,
-                    "occupied": bool(student)
+                    "occupied": student != ""
                 })
-                seat_counter += 1
-                col_counter += 1
+                seat += 1
+                col += 1
         else:
-            col_counter += 1
-    max_cols = max(max_cols, col_counter - 1)
+            col += 1
+    max_cols = max(max_cols, col-1)
 
 df = pd.DataFrame(rows)
 
-# 1) Селектор по клику/тачу
-selector = alt.selection_single(
-    fields=["row", "col"],
-    on="click",     # ловит тапы на мобильных
-    empty="none"
+# =============================================
+# РЕНДЕР С PLOTLY
+# =============================================
+fig = px.scatter(
+    df,
+    x="col",
+    y="row",
+    color=df["occupied"].map({True: "red", False: "lightgray"}),
+    hover_data=["help"],
+    labels={"col": "", "row": "Row"},
+    height=len(row_config) * 50,
 )
 
-# 2) Базовый Altair Chart
-base = (
-    alt.Chart(df)
-    .mark_circle(size=300)
-    .encode(
-        x=alt.X("col:O", title=None, axis=alt.Axis(labels=False, ticks=False),
-                scale=alt.Scale(domain=list(range(1, max_cols + 1)))),
-        y=alt.Y("row:O", title="Row", sort="descending",
-                axis=alt.Axis(labelAngle=0)),
-        color=alt.condition(
-            alt.datum.occupied,
-            alt.value("red"),
-            alt.value("lightgray")
-        ),
-        tooltip=alt.Tooltip("help:N", title="")
-    )
-    .add_selection(selector)
-    .properties(height=len(row_config) * 50)
+fig.update_traces(
+    marker=dict(size=20),
+    showlegend=False,
+    hovertemplate="%{customdata[0]}<extra></extra>"
 )
 
-# 3) Преобразуем в dict и внедряем showOn:'click'
-spec = base.to_dict()
-spec["usermeta"] = {
-    "embedOptions": {
-        "tooltip": {"showOn": "click"}
-    }
-}
+# Убираем линии сетки по горизонтали (ряды) и вертикали
+fig.update_yaxes(showgrid=False, tickmode="array",
+                 tickvals=list(range(1, len(row_config)+1)),
+                 autorange=True)  # row 1 будет внизу, row N — наверху
+fig.update_xaxes(showgrid=False, showticklabels=False, zeroline=False)
 
-# 4) Рендерим через Vega-Lite API
-st.vega_lite_chart(spec, use_container_width=True)
+fig.update_layout(margin=dict(l=20, r=20, t=20, b=20), dragmode=False)
+
+st.plotly_chart(fig, use_container_width=True)
 
 # Таблица с рассадкой
 st.subheader("Student seating table")
-table = [{"Name": nm, "Place": f"Row {r}, Seat {s}"} for (r, s), nm in assignments.items()]
+table = [
+    {"Name": nm, "Place": f"Row {r}, Seat {s}"}
+    for (r, s), nm in assignments.items()
+]
 st.dataframe(pd.DataFrame(table), hide_index=True, use_container_width=True)
