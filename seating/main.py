@@ -3,12 +3,6 @@ import pandas as pd
 import altair as alt
 
 # =============================================
-# ВКЛЮЧАЕМ ТУЛТИПЫ ПО КЛИКУ/ТАЧУ
-# =============================================
-# Vega-Tooltip: showOn 'click' позволит мобильным пользователям тапнуть по точке
-alt.renderers.set_embed_options(tooltip={'showOn': 'click'})
-
-# =============================================
 # КОНФИГУРАЦИЯ АУДИТОРИЙ
 # =============================================
 
@@ -125,7 +119,7 @@ if len(students) > total_seats:
 
 st.subheader(f"{name}")
 
-# Собираем DataFrame с учётом gap и tooltip
+# Собираем DataFrame с учётом gap и "help"
 rows = []
 max_cols = 0
 for r_idx, cfg in enumerate(row_config, start=1):
@@ -135,11 +129,11 @@ for r_idx, cfg in enumerate(row_config, start=1):
         if item == "desk":
             for _ in range(2):
                 student = assignments.get((r_idx, seat_counter), "")
-                tooltip = f"{student} , seat {seat_counter}" if student else ""
+                help_text = f"{student} — seat {seat_counter}" if student else ""
                 rows.append({
                     "row": r_idx,
                     "col": col_counter,
-                    "tooltip": tooltip,
+                    "help": help_text,
                     "occupied": bool(student)
                 })
                 seat_counter += 1
@@ -150,14 +144,15 @@ for r_idx, cfg in enumerate(row_config, start=1):
 
 df = pd.DataFrame(rows)
 
-# Добавляем селектор, который срабатывает на клик/тап:
+# 1) Селектор по клику/тачу
 selector = alt.selection_single(
-    on="click",        # click/тач
     fields=["row", "col"],
+    on="click",     # ловит тапы на мобильных
     empty="none"
 )
 
-chart = (
+# 2) Базовый Altair Chart
+base = (
     alt.Chart(df)
     .mark_circle(size=300)
     .encode(
@@ -170,14 +165,22 @@ chart = (
             alt.value("red"),
             alt.value("lightgray")
         ),
-        opacity=alt.condition(selector, alt.value(1), alt.value(0.8)),
-        tooltip=alt.Tooltip("tooltip:N", title="")
+        tooltip=alt.Tooltip("help:N", title="")
     )
     .add_selection(selector)
     .properties(height=len(row_config) * 50)
 )
 
-st.altair_chart(chart, use_container_width=True)
+# 3) Преобразуем в dict и внедряем showOn:'click'
+spec = base.to_dict()
+spec["usermeta"] = {
+    "embedOptions": {
+        "tooltip": {"showOn": "click"}
+    }
+}
+
+# 4) Рендерим через Vega-Lite API
+st.vega_lite_chart(spec, use_container_width=True)
 
 # Таблица с рассадкой
 st.subheader("Student seating table")
