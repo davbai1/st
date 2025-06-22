@@ -3,6 +3,12 @@ import pandas as pd
 import plotly.express as px
 
 # =============================================
+# НАСТРОЙКИ ЦВЕТОВ
+# =============================================
+OCCUPIED_COLOR = "#FF0000"   # цвет для занятых мест (зелёный)
+EMPTY_COLOR = "#808080"      # цвет для свободных мест (красный)
+
+# =============================================
 # КОНФИГУРАЦИЯ АУДИТОРИЙ
 # =============================================
 
@@ -119,7 +125,7 @@ if len(students) > total_seats:
 
 st.subheader(name)
 
-# Собираем DataFrame с учётом gap и текстом для тултипа
+# Собираем DataFrame с gap и текстом для тултипа
 rows = []
 max_cols = 0
 for r_idx, cfg in enumerate(row_config, start=1):
@@ -144,6 +150,12 @@ for r_idx, cfg in enumerate(row_config, start=1):
 
 df = pd.DataFrame(rows)
 
+# Добавляем колонку с цветом маркера
+df["marker_color"] = df["occupied"].map({
+    True: OCCUPIED_COLOR,
+    False: EMPTY_COLOR
+})
+
 # =============================================
 # РЕНДЕР С PLOTLY
 # =============================================
@@ -151,22 +163,25 @@ fig = px.scatter(
     df,
     x="col",
     y="row",
-    color=df["occupied"].map({True: "red", False: "lightgray"}),
     hover_data=["help"],
     labels={"col": "", "row": "Row"},
     height=len(row_config) * 50,
 )
 
+# Применяем пользовательские цвета к каждому маркеру
 fig.update_traces(
-    marker=dict(size=20),
+    marker=dict(
+        size=20,
+        color=df["marker_color"]
+    ),
     showlegend=False,
     hovertemplate="%{customdata[0]}<extra></extra>"
 )
 
-# Убираем линии сетки по горизонтали (ряды) и вертикали
+# Убираем линии сетки и метки
 fig.update_yaxes(showgrid=False, tickmode="array",
                  tickvals=list(range(1, len(row_config)+1)),
-                 autorange=True)  # row 1 будет внизу, row N — наверху
+                 autorange=True)
 fig.update_xaxes(showgrid=False, showticklabels=False, zeroline=False)
 
 fig.update_layout(margin=dict(l=20, r=20, t=20, b=20), dragmode=False)
